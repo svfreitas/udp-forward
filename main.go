@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -10,7 +11,14 @@ import (
 )
 
 func main() {
-	config, err := LoadConfiguration()
+
+	filename := flag.String("f", "", "configuration file")
+	flag.Parse()
+	if *filename == "" {
+		flag.Usage()
+		log.Fatal("Must provide configuration file: udp-forwarder -f <filename>")
+	}
+	config, err := LoadConfiguration(*filename)
 
 	if err != nil {
 		log.Printf("Unable to load configuration, error :%s", err)
@@ -26,7 +34,7 @@ func main() {
 
 	bpfFilter := fmt.Sprintf("udp and port %d", config.UdpPortReceiver)
 	if err := handle.SetBPFFilter(bpfFilter); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
@@ -60,7 +68,6 @@ func handlePacket(handle *pcap.Handle, packet gopacket.Packet, config *Config) {
 	}
 
 	for _, destination := range config.Destinations {
-
 		udpFrameOptions.destIP = destination.IpAddress
 		udpFrameOptions.destMac = destination.MacAddress
 		udpFrameOptions.destPort = destination.Port
@@ -73,11 +80,11 @@ func handlePacket(handle *pcap.Handle, packet gopacket.Packet, config *Config) {
 		frameBytes, err := createSerializedUDPFrame(udpFrameOptions)
 
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Error serializing UDP frame to send to destination %s : %s", destination.IpAddress.String(), err)
 		}
 
 		if err := handle.WritePacketData(frameBytes); err != nil {
-			log.Fatal(err)
+			log.Printf("Error Writing UDP data to destination %s : %s ", destination.IpAddress.String(), err)
 		}
 	}
 }

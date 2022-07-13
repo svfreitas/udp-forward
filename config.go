@@ -11,12 +11,12 @@ import (
 )
 
 type rawConfig struct {
-	InterfaceName      string   `json:"interface_name"`
-	IpAddressReceiver  string   `json:"ip_address_receiver"`
-	MacAddressReceiver string   `json:"mac_address_receiver"`
-	DefaultGateway     string   `json:"default_gateway"`
-	MaxPacketSize      int      `json:"max_packet_size"`
-	Destinations       []string `json:"destinations"`
+	InterfaceName     string `json:"interface_name"`
+	IpAddressReceiver string `json:"ip_address_receiver"`
+	//	MacAddressReceiver string   `json:"mac_address_receiver"`
+	DefaultGateway string   `json:"default_gateway"`
+	MaxPacketSize  int      `json:"max_packet_size"`
+	Destinations   []string `json:"destinations"`
 }
 
 type Config struct {
@@ -35,13 +35,13 @@ type Destination struct {
 	Port       uint16
 }
 
-func LoadConfiguration() (*Config, error) {
+func LoadConfiguration(filename string) (*Config, error) {
 
 	var config Config
 	var rawConfig rawConfig
 	var err error
 
-	content, err := ioutil.ReadFile("./udp-fwd.json")
+	content, err := ioutil.ReadFile(filename)
 
 	if err != nil {
 		return nil, err
@@ -64,15 +64,13 @@ func LoadConfiguration() (*Config, error) {
 		log.Fatal("IpAddressReceiver bad format")
 	}
 	log.Print(config.IpAddressReceiver.String())
-	if hwAddr, _, err := arping.Ping(config.IpAddressReceiver); err != nil {
-		log.Printf("MAC address resolution problem for Receiver: %s, will use the provided one in the configuration", err)
-		config.MacAddressReceiver, err = net.ParseMAC(rawConfig.MacAddressReceiver)
-		if err != nil {
-			log.Fatal("MacAddressReceiver bad format")
-		}
+
+	// find MAC address of receiver IP
+	netInterface, err := net.InterfaceByName(config.InterfaceName)
+	if err != nil {
+		log.Printf("MAC address resolution problem for Receiver: %s", err)
 	} else {
-		log.Printf("%s is at %s\n", config.IpAddressReceiver.String(), hwAddr)
-		config.MacAddresDefaultGateway = hwAddr
+		config.MacAddressReceiver = netInterface.HardwareAddr
 	}
 
 	portUint, err := strconv.ParseUint(port, 10, 16)
@@ -91,7 +89,6 @@ func LoadConfiguration() (*Config, error) {
 	if hwAddr, _, err := arping.Ping(dg); err != nil {
 		log.Fatalf("MAC address resolution problem for DefaultGateway: %s", err)
 	} else {
-		log.Printf("%s is at %s\n", dg.String(), hwAddr)
 		config.MacAddresDefaultGateway = hwAddr
 	}
 

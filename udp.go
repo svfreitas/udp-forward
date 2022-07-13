@@ -61,7 +61,6 @@ func createSerializedUDPFrame(opts UdpFrameOptions) ([]byte, error) {
 	udp := &layers.UDP{
 		SrcPort: layers.UDPPort(opts.sourcePort),
 		DstPort: layers.UDPPort(opts.destPort),
-		// we configured "Length" and "Checksum" to be set for us
 	}
 	udp.SetNetworkLayerForChecksum(ip)
 	err := gopacket.SerializeLayers(buf, serializeOpts, eth, ip, udp, gopacket.Payload(opts.payloadBytes))
