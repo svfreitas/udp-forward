@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 
-	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
 
@@ -86,6 +85,7 @@ func handlePacket2(handle *pcap.Handle, payload []byte, remote *net.UDPAddr, con
 	log.Printf("udpFrameOptions.sourceMac = %v", udpFrameOptions.sourceMac)
 
 	udpFrameOptions.sourceIP = remote.IP
+	udpFrameOptions.sourcePort = uint16(remote.Port)
 	udpFrameOptions.payloadBytes = payload
 	log.Printf("udpFrameOptions.sourceIP = %v", udpFrameOptions.sourceIP)
 
@@ -99,57 +99,60 @@ func handlePacket2(handle *pcap.Handle, payload []byte, remote *net.UDPAddr, con
 		log.Printf("udpFrameOptions.destPort = %v", udpFrameOptions.destPort)
 		log.Printf("udpFrameOptions.destMac = %v", udpFrameOptions.destMac)
 
-		frameBytes, err := createSerializedUDPFrame(udpFrameOptions)
+		sliceFrameBytes, err := createSerializedUDPFrame(udpFrameOptions)
 
 		if err != nil {
 			log.Printf("Error serializing UDP frame to send to destination %s : %s", destination.IpAddress.String(), err)
 			continue
 		}
-
-		if err := handle.WritePacketData(frameBytes); err != nil {
-			log.Printf("Error Writing UDP data to destination %s : %s ", destination.IpAddress.String(), err)
-		}
-	}
-}
-
-func handlePacket(handle *pcap.Handle, packet gopacket.Packet, config *Config) {
-	var udpFrameOptions UdpFrameOptions
-
-	udpFrameOptions.sourceMac = config.MacAddressReceiver
-	log.Print("-------------------------------------")
-	log.Printf("udpFrameOptions.sourceMac = %v", udpFrameOptions.sourceMac)
-
-	if netw := packet.NetworkLayer(); netw != nil {
-		srcN, _ := netw.NetworkFlow().Endpoints()
-		if transp := packet.TransportLayer(); transp != nil {
-			if app := packet.ApplicationLayer(); app != nil {
-				data := app.Payload()
-				udpFrameOptions.sourceIP = net.ParseIP(srcN.String())
-				udpFrameOptions.payloadBytes = data
-				log.Printf("udpFrameOptions.sourceIP = %v", udpFrameOptions.sourceIP)
+		log.Printf("len(sliceFrameBytes) = %d", len(sliceFrameBytes))
+		for i, frame := range sliceFrameBytes {
+			log.Printf("frame[%d] = %v", i, frame)
+			if err := handle.WritePacketData(frame); err != nil {
+				log.Printf("Error Writing UDP data to destination %s : %s ", destination.IpAddress.String(), err)
 			}
 		}
 	}
-
-	for _, destination := range config.Destinations {
-		udpFrameOptions.destIP = destination.IpAddress
-		udpFrameOptions.destMac = destination.MacAddress
-		udpFrameOptions.destPort = destination.Port
-		udpFrameOptions.isIPv6 = false
-
-		log.Printf("udpFrameOptions.destIP = %v", udpFrameOptions.destIP)
-		log.Printf("udpFrameOptions.destPort = %v", udpFrameOptions.destPort)
-		log.Printf("udpFrameOptions.destMac = %v", udpFrameOptions.destMac)
-
-		frameBytes, err := createSerializedUDPFrame(udpFrameOptions)
-
-		if err != nil {
-			log.Printf("Error serializing UDP frame to send to destination %s : %s", destination.IpAddress.String(), err)
-			continue
-		}
-
-		if err := handle.WritePacketData(frameBytes); err != nil {
-			log.Printf("Error Writing UDP data to destination %s : %s ", destination.IpAddress.String(), err)
-		}
-	}
 }
+
+// func handlePacket(handle *pcap.Handle, packet gopacket.Packet, config *Config) {
+// 	var udpFrameOptions UdpFrameOptions
+
+// 	udpFrameOptions.sourceMac = config.MacAddressReceiver
+// 	log.Print("-------------------------------------")
+// 	log.Printf("udpFrameOptions.sourceMac = %v", udpFrameOptions.sourceMac)
+
+// 	if netw := packet.NetworkLayer(); netw != nil {
+// 		srcN, _ := netw.NetworkFlow().Endpoints()
+// 		if transp := packet.TransportLayer(); transp != nil {
+// 			if app := packet.ApplicationLayer(); app != nil {
+// 				data := app.Payload()
+// 				udpFrameOptions.sourceIP = net.ParseIP(srcN.String())
+// 				udpFrameOptions.payloadBytes = data
+// 				log.Printf("udpFrameOptions.sourceIP = %v", udpFrameOptions.sourceIP)
+// 			}
+// 		}
+// 	}
+
+// 	for _, destination := range config.Destinations {
+// 		udpFrameOptions.destIP = destination.IpAddress
+// 		udpFrameOptions.destMac = destination.MacAddress
+// 		udpFrameOptions.destPort = destination.Port
+// 		udpFrameOptions.isIPv6 = false
+
+// 		log.Printf("udpFrameOptions.destIP = %v", udpFrameOptions.destIP)
+// 		log.Printf("udpFrameOptions.destPort = %v", udpFrameOptions.destPort)
+// 		log.Printf("udpFrameOptions.destMac = %v", udpFrameOptions.destMac)
+
+// 		frameBytes, err := createSerializedUDPFrame(udpFrameOptions)
+
+// 		if err != nil {
+// 			log.Printf("Error serializing UDP frame to send to destination %s : %s", destination.IpAddress.String(), err)
+// 			continue
+// 		}
+
+// 		if err := handle.WritePacketData(frameBytes); err != nil {
+// 			log.Printf("Error Writing UDP data to destination %s : %s ", destination.IpAddress.String(), err)
+// 		}
+// 	}
+// }

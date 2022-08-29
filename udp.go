@@ -11,6 +11,7 @@ import (
 const MTU = 1500
 const MaxUdpPayload = MTU - 28
 const IpFragOffsetStep = (MTU - 20) / 8
+const packetID uint16 = 12345
 
 type UdpFrameOptions struct {
 	sourceIP, destIP     net.IP
@@ -27,7 +28,7 @@ type serializableNetworkLayer interface {
 
 // createSerializedUDPFrame creates an Ethernet frame encapsulating our UDP
 // packet for injection to the local network
-func createSerializedUDPFrame(opts UdpFrameOptions) ([]byte, error) {
+func createSerializedUDPFrame(opts UdpFrameOptions) ([][]byte, error) {
 	// EthernetHeader = 14
 	// IP  Header = 20  <--+
 	// UCP header = 8   <--+-- 1500 == MTU
@@ -35,7 +36,7 @@ func createSerializedUDPFrame(opts UdpFrameOptions) ([]byte, error) {
 	// CRC 4
 
 	//udpPayloadSize := len(opts.payloadBytes)
-	log.Printf("TESTANDO ENVIO - payloadSize=%v", len(opts.payloadBytes))
+	log.Printf("payloadSize=%v", len(opts.payloadBytes))
 
 	if len(opts.payloadBytes) > MaxUdpPayload { // MTU = 1500 = 1472 + 8 + 20
 		log.Print("UDP payload bigger than 1472 bytes, will slipt in several packets")
@@ -46,7 +47,7 @@ func createSerializedUDPFrame(opts UdpFrameOptions) ([]byte, error) {
 
 }
 
-func udpPacketFragmentationControl(opts UdpFrameOptions) ([]byte, error) {
+func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 	// EthernetHeader = 14
 	// IP  Header = 20  <--+
 	// UDP header = 8   <--+-- 1500 == MTU
@@ -54,20 +55,39 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([]byte, error) {
 	// CRC 4
 	udpPayloadSize := len(opts.payloadBytes)
 
-	numberOfFragments := udpPayloadSize / MaxUdpPayload
-	lastUdpPayloadLength := (udpPayloadSize - MaxUdpPayload*numberOfFragments)
+	log.Printf("payloadSize=%v", len(opts.payloadBytes))
 
-	if udpPayloadSize%1472 > 0 {
+	//numberOfFragments := (udpPayloadSize + 28) / 1500
+	factor := 1 + (udpPayloadSize - (MTU - 28))
+	numberOfFragments := 1 + factor/(MTU-20)
+	//lastUdpPayloadLength := (udpPayloadSize - MaxUdpPayload*numberOfFragments)
+
+	if factor%(MTU-20) > 0 {
 		numberOfFragments++
+	}
+
+	slicePackets := make([][]byte, numberOfFragments)
+
+	log.Printf("numberOfFragments=%v", numberOfFragments)
+
+	udp2 := &layers.UDP{
+		SrcPort: layers.UDPPort(opts.sourcePort),
+		DstPort: layers.UDPPort(opts.destPort),
+		Length:  uint16(len(opts.payloadBytes) + 8),
 	}
 
 	for i := 0; i < numberOfFragments; i++ {
 		buf := gopacket.NewSerializeBuffer()
-
+		log.Printf("loop %d", i)
 		serializeOpts := gopacket.SerializeOptions{
+			FixLengths:       false,
+			ComputeChecksums: false,
+		}
+		serializeOpts2 := gopacket.SerializeOptions{
 			FixLengths:       true,
 			ComputeChecksums: true,
 		}
+
 		ethernetType := layers.EthernetTypeIPv4
 		if opts.isIPv6 {
 			ethernetType = layers.EthernetTypeIPv6
@@ -77,67 +97,127 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([]byte, error) {
 			DstMAC:       opts.destMac,
 			EthernetType: ethernetType,
 		}
-		var ip serializableNetworkLayer
+
 		var flags layers.IPv4Flag
-		if i < (numberOfFragments - 1) {
+
+		if i < numberOfFragments-1 {
 			flags = layers.IPv4MoreFragments
+			log.Printf("IPv4MoreFragments")
 		} else {
-			flags = layers.IPv4DontFragment
+			flags = 0
+			log.Printf("flags = 0")
 		}
 
-		ip = &layers.IPv4{
+		ip := &layers.IPv4{
+			Id:         uint16(packetID),
 			SrcIP:      opts.sourceIP,
 			DstIP:      opts.destIP,
 			Protocol:   layers.IPProtocolUDP,
 			Version:    4,
-			TTL:        32,
+			TTL:        64,
 			FragOffset: IpFragOffsetStep * uint16(i),
 			Flags:      flags,
+			IHL:        5,
 		}
+
 		var udp *layers.UDP
+
 		if i == 0 {
+			//-------------------------------
+
+			ip2 := &layers.IPv4{
+				Id:         uint16(packetID),
+				SrcIP:      opts.sourceIP,
+				DstIP:      opts.destIP,
+				Protocol:   layers.IPProtocolUDP,
+				Version:    4,
+				TTL:        64,
+				FragOffset: 0,
+				Flags:      0,
+				IHL:        5,
+				Length:     1500,
+			}
+
+			udp2.SetNetworkLayerForChecksum(ip2) //TODO teste
+			err := gopacket.SerializeLayers(buf, serializeOpts2, eth, ip2, udp2, gopacket.Payload(opts.payloadBytes))
+
+			log.Printf("********** udp2.Checksum = %v", udp2.Checksum)
+
+			if err != nil {
+				return nil, err
+			}
+
+			//-------------------------------
+
+			log.Print("First packet has UDP layer")
 			udp = &layers.UDP{
-				SrcPort: layers.UDPPort(opts.sourcePort),
-				DstPort: layers.UDPPort(opts.destPort),
-				Length:  calculateUdpPayloadSize(lastUdpPayloadLength, i, numberOfFragments),
+				SrcPort:  layers.UDPPort(opts.sourcePort),
+				DstPort:  layers.UDPPort(opts.destPort),
+				Length:   udp2.Length,
+				Checksum: udp2.Checksum,
 			}
 		}
+		stopSlicePos := 0
+		startSlicePos := 0
 
-		udp.SetNetworkLayerForChecksum(ip)
-
-		startSlicePos := i * IpFragOffsetStep * 8
-		stopSlicePos := (i + 1) * IpFragOffsetStep * 8
+		if i == 0 {
+			startSlicePos = 0
+			stopSlicePos = (i+1)*IpFragOffsetStep*8 - 8 //1480 -8 = 1472
+		} else {
+			startSlicePos = i*IpFragOffsetStep*8 - 8 //1472
+			stopSlicePos = (i+1)*IpFragOffsetStep*8 - 8
+		}
 
 		if stopSlicePos > len(opts.payloadBytes) {
 			stopSlicePos = len(opts.payloadBytes)
 		}
-
+		log.Printf("startSlicePos = %d, stopSlicePos = %d", startSlicePos, stopSlicePos)
+		log.Printf("len(payloadBytes) = %d", len(opts.payloadBytes))
 		payloadFragmented := opts.payloadBytes[startSlicePos:stopSlicePos]
+		log.Printf("len(payloadFragmented) = %d", len(payloadFragmented))
+		log.Printf("payloadFragmented = [%v]", payloadFragmented)
 
 		if i == 0 {
-			err := gopacket.SerializeLayers(buf, serializeOpts, eth, ip, udp, gopacket.Payload(payloadFragmented))
+			ip.Length = uint16(len(payloadFragmented) + 8 + 20)
+		} else {
+			ip.Length = uint16(len(payloadFragmented) + 20)
+		}
+
+		log.Printf("ip = %v", ip)
+
+		if i == 0 {
+
+			udp.SetNetworkLayerForChecksum(ip)
+
+			//Para caluclar o checksum
+			err := gopacket.SerializeLayers(buf, serializeOpts2, eth, ip, udp, gopacket.Payload(payloadFragmented))
+			if err != nil {
+				return nil, err
+			}
+
+			log.Printf("********** ip.checksum = %v", ip.Checksum)
+			ip.Length = MTU
+			udp.Length = udp2.Length
+			udp.Checksum = udp2.Checksum
+
+			err = gopacket.SerializeLayers(buf, serializeOpts, eth, ip, udp, gopacket.Payload(payloadFragmented))
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			err := gopacket.SerializeLayers(buf, serializeOpts, eth, ip, gopacket.Payload(payloadFragmented))
+			err := gopacket.SerializeLayers(buf, serializeOpts2, eth, ip, gopacket.Payload(payloadFragmented))
 			if err != nil {
 				return nil, err
 			}
 		}
+		slicePackets[i] = buf.Bytes()
+		log.Printf("len(slicePackets) = [%d]", len(slicePackets))
 	}
-	return nil, nil
+
+	return slicePackets, nil
 }
 
-func calculateUdpPayloadSize(lastUdpPayloadLength int, fragIdx int, numberOfFragments int) uint16 {
-	if fragIdx < numberOfFragments-1 {
-		return MaxUdpPayload
-	} else {
-		return uint16(lastUdpPayloadLength)
-	}
-}
-
-func udpOnePacket(opts UdpFrameOptions) ([]byte, error) {
+func udpOnePacket(opts UdpFrameOptions) ([][]byte, error) {
 
 	buf := gopacket.NewSerializeBuffer()
 	serializeOpts := gopacket.SerializeOptions{
@@ -183,5 +263,7 @@ func udpOnePacket(opts UdpFrameOptions) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	slicePackets := make([][]byte, 1)
+	slicePackets[0] = buf.Bytes()
+	return slicePackets, nil
 }
