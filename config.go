@@ -63,7 +63,6 @@ func LoadConfiguration(filename string) (*Config, error) {
 	if config.IpAddressReceiver == nil {
 		log.Fatal("IpAddressReceiver bad format")
 	}
-	log.Print(config.IpAddressReceiver.String())
 
 	// find MAC address of receiver IP
 	netInterface, err := net.InterfaceByName(config.InterfaceName)

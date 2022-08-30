@@ -22,7 +22,7 @@ func main() {
 		log.Printf("Unable to load configuration, error :%s", err)
 		return
 	}
-	//---------------------
+
 	handle, err := pcap.OpenLive(config.InterfaceName, int32(config.MaxPacketSize), false, pcap.BlockForever)
 
 	if err != nil {
@@ -34,7 +34,7 @@ func main() {
 		Port: int(config.UdpPortReceiver),
 		IP:   config.IpAddressReceiver,
 	}
-	log.Printf("[%v]", addr)
+	log.Printf("Listening on [%v]", addr)
 	conn, err := net.ListenUDP("udp", &addr) // code does not block here
 	if err != nil {
 		panic(err)
@@ -48,33 +48,9 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		log.Printf("[%v][%d]%v", remote, rlen, buf[:rlen])
+		log.Printf("Data read from [%v], length %d", remote, rlen)
 		handlePacket2(handle, buf[:rlen], remote, config)
 	}
-	// Do stuff with the read bytes
-	//---------------------
-	// handle, err := pcap.OpenLive(config.InterfaceName, int32(config.MaxPacketSize), false, pcap.BlockForever)
-
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer handle.Close()
-
-	// bpfFilter := fmt.Sprintf("udp and port %d", config.UdpPortReceiver)
-
-	// if err := handle.SetBPFFilter(bpfFilter); err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-
-	// for packet := range packetSource.Packets() {
-	// 	//start := time.Now()
-	// 	handlePacket(handle, packet, config)
-	// 	//elapsed := time.Since(start)
-	// 	//log.Printf("trap redirection takes %s", elapsed)
-	// }
-
 }
 
 func handlePacket2(handle *pcap.Handle, payload []byte, remote *net.UDPAddr, config *Config) {
@@ -106,53 +82,11 @@ func handlePacket2(handle *pcap.Handle, payload []byte, remote *net.UDPAddr, con
 			continue
 		}
 		log.Printf("len(sliceFrameBytes) = %d", len(sliceFrameBytes))
-		for i, frame := range sliceFrameBytes {
-			log.Printf("frame[%d] = %v", i, frame)
+		for _, frame := range sliceFrameBytes {
+			//log.Printf("Sending frame[%d] = %v", i, frame)
 			if err := handle.WritePacketData(frame); err != nil {
 				log.Printf("Error Writing UDP data to destination %s : %s ", destination.IpAddress.String(), err)
 			}
 		}
 	}
 }
-
-// func handlePacket(handle *pcap.Handle, packet gopacket.Packet, config *Config) {
-// 	var udpFrameOptions UdpFrameOptions
-
-// 	udpFrameOptions.sourceMac = config.MacAddressReceiver
-// 	log.Print("-------------------------------------")
-// 	log.Printf("udpFrameOptions.sourceMac = %v", udpFrameOptions.sourceMac)
-
-// 	if netw := packet.NetworkLayer(); netw != nil {
-// 		srcN, _ := netw.NetworkFlow().Endpoints()
-// 		if transp := packet.TransportLayer(); transp != nil {
-// 			if app := packet.ApplicationLayer(); app != nil {
-// 				data := app.Payload()
-// 				udpFrameOptions.sourceIP = net.ParseIP(srcN.String())
-// 				udpFrameOptions.payloadBytes = data
-// 				log.Printf("udpFrameOptions.sourceIP = %v", udpFrameOptions.sourceIP)
-// 			}
-// 		}
-// 	}
-
-// 	for _, destination := range config.Destinations {
-// 		udpFrameOptions.destIP = destination.IpAddress
-// 		udpFrameOptions.destMac = destination.MacAddress
-// 		udpFrameOptions.destPort = destination.Port
-// 		udpFrameOptions.isIPv6 = false
-
-// 		log.Printf("udpFrameOptions.destIP = %v", udpFrameOptions.destIP)
-// 		log.Printf("udpFrameOptions.destPort = %v", udpFrameOptions.destPort)
-// 		log.Printf("udpFrameOptions.destMac = %v", udpFrameOptions.destMac)
-
-// 		frameBytes, err := createSerializedUDPFrame(udpFrameOptions)
-
-// 		if err != nil {
-// 			log.Printf("Error serializing UDP frame to send to destination %s : %s", destination.IpAddress.String(), err)
-// 			continue
-// 		}
-
-// 		if err := handle.WritePacketData(frameBytes); err != nil {
-// 			log.Printf("Error Writing UDP data to destination %s : %s ", destination.IpAddress.String(), err)
-// 		}
-// 	}
-// }
