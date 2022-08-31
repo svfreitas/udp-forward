@@ -64,7 +64,7 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 
 	slicePackets := make([][]byte, numberOfFragments)
 
-	log.Printf("numberOfFragments=%v", numberOfFragments)
+	slogger.Debugf("numberOfFragments=%v", numberOfFragments)
 
 	//Used to calculate checksum and IP packet length
 	udp2 := &layers.UDP{
@@ -75,7 +75,7 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 
 	for i := 0; i < numberOfFragments; i++ {
 		buf := gopacket.NewSerializeBuffer()
-		log.Printf("packet %d", i)
+		slogger.Debugf("packet %d", i)
 		serializeOpts := gopacket.SerializeOptions{
 			FixLengths:       false,
 			ComputeChecksums: false,
@@ -99,10 +99,10 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 
 		if i < numberOfFragments-1 {
 			flags = layers.IPv4MoreFragments
-			//log.Printf("IPv4MoreFragments")
+			slogger.Debugf("IPv4MoreFragments")
 		} else {
 			flags = 0
-			//log.Printf("flags = 0")
+			slogger.Debugf("flags = 0")
 		}
 
 		ip := &layers.IPv4{
@@ -137,7 +137,7 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 			udp2.SetNetworkLayerForChecksum(ipPseudoHeader)
 			err := gopacket.SerializeLayers(buf, serializeOpts2, eth, ipPseudoHeader, udp2, gopacket.Payload(opts.payloadBytes))
 
-			//log.Printf("udp2.Checksum = %v", udp2.Checksum)
+			slogger.Debugf("udp2.Checksum = %v", udp2.Checksum)
 
 			if err != nil {
 				return nil, err
@@ -164,11 +164,11 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 		if stopSlicePos > len(opts.payloadBytes) {
 			stopSlicePos = len(opts.payloadBytes)
 		}
-		//log.Printf("startSlicePos = %d, stopSlicePos = %d", startSlicePos, stopSlicePos)
-		//log.Printf("len(payloadBytes) = %d", len(opts.payloadBytes))
+		slogger.Debugf("startSlicePos = %d, stopSlicePos = %d", startSlicePos, stopSlicePos)
+		slogger.Debugf("len(payloadBytes) = %d", len(opts.payloadBytes))
 		payloadFragmented := opts.payloadBytes[startSlicePos:stopSlicePos]
 		log.Printf("len(payloadFragmented) = %d", len(payloadFragmented))
-		//log.Printf("payloadFragmented = [%v]", payloadFragmented)
+		slogger.Debugf("payloadFragmented = [%v]", payloadFragmented)
 
 		if i == 0 {
 			ip.Length = uint16(len(payloadFragmented) + 8 + 20)
@@ -176,7 +176,7 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 			ip.Length = uint16(len(payloadFragmented) + 20)
 		}
 
-		//log.Printf("ip = %v", ip)
+		slogger.Debugf("ip = %v", ip)
 
 		if i == 0 {
 
@@ -190,7 +190,7 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 			ip.Length = MTU
 			udp.Length = udp2.Length
 			udp.Checksum = udp2.Checksum
-			//	log.Printf("**********\nip.checksum = %v\nip.Length = %v\nudp.Checksum=%v\nudp.Length=%v\n**********", ip.Checksum, ip.Length, udp.Checksum, udp.Length)
+			slogger.Debugf("ip.checksum = %v, ip.Length = %v, udp.Checksum=%v, udp.Length=%v", ip.Checksum, ip.Length, udp.Checksum, udp.Length)
 
 			err = gopacket.SerializeLayers(buf, serializeOpts, eth, ip, udp, gopacket.Payload(payloadFragmented))
 			if err != nil {
@@ -203,7 +203,7 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 			}
 		}
 		slicePackets[i] = buf.Bytes()
-		log.Printf("len(slicePackets) = [%d]", len(slicePackets))
+		slogger.Debugf("len(slicePackets) = [%d]", len(slicePackets))
 	}
 
 	return slicePackets, nil
