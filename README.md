@@ -1,6 +1,6 @@
 # udp-forwarder
 
-Simple udp packet forwarder preserving (spoofing)  the original IP that sent the packet
+Simple udp packet forwarder preserving (spoofing) the original IP that sent the packet
 
 Configuration file example:
 

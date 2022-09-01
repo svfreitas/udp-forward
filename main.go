@@ -98,6 +98,8 @@ func handlePacket2(handle *pcap.Handle, payload []byte, remote *net.UDPAddr, con
 			continue
 		}
 		slogger.Debugf("len(sliceFrameBytes) = %d", len(sliceFrameBytes))
+		slogger.Info("Sending data to %s", destination.IpAddress.String())
+
 		for i, frame := range sliceFrameBytes {
 			slogger.Debugf("Sending frame[%d] = %v", i, frame)
 			if err := handle.WritePacketData(frame); err != nil {
