@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -8,13 +10,16 @@ import (
 
 var slogger *zap.SugaredLogger
 
-func InitLogger() {
+func InitLogger() http.Handler {
 	writeSyncer := getLogWriter()
 	encoder := getEncoder()
-	core := zapcore.NewCore(encoder, writeSyncer, zapcore.DebugLevel)
+	atom := zap.NewAtomicLevel()
+	core := zapcore.NewCore(encoder, writeSyncer, atom)
 	// Print function lines
+
 	logger := zap.New(core, zap.AddCaller())
 	slogger = logger.Sugar()
+	return atom
 }
 
 func getEncoder() zapcore.Encoder {
@@ -29,7 +34,7 @@ func getEncoder() zapcore.Encoder {
 func getLogWriter() zapcore.WriteSyncer {
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   "udp-forwarder.log", // Log name
-		MaxSize:    1,                   // File content size, MB
+		MaxSize:    10,                  // File content size, MB
 		MaxBackups: 5,                   // Maximum number of old files retained
 		MaxAge:     30,                  // Maximum number of days to keep old files
 		Compress:   false,               // Is the file compressed

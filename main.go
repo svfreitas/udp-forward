@@ -2,26 +2,39 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net"
+	"net/http"
 
 	"github.com/google/gopacket/pcap"
 )
 
 func main() {
+	httpLogHandler := InitLogger()
+
+	if slogger == nil {
+		panic("Unable to create logger")
+	}
+	defer slogger.Sync()
 
 	filename := flag.String("f", "", "configuration file")
 	flag.Parse()
 	if *filename == "" {
 		flag.Usage()
-		slogger.Fatal("Must provide configuration file: udp-forwarder -f <filename>")
+		fmt.Printf("Must provide configuration file: udp-forwarder -f <filename>")
+		return
 	}
 	config, err := LoadConfiguration(*filename)
 
 	if err != nil {
-		slogger.Fatal("Unable to load configuration, error :%s", err)
-		return
+		slogger.Fatalf("Unable to load configuration, error :%s", err)
 	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/log/level", httpLogHandler)
+	host := fmt.Sprintf("localhost:%d", config.LogLevelConfigPort)
+	go http.ListenAndServe(host, mux)
 
 	handle, err := pcap.OpenLive(config.InterfaceName, int32(config.MaxPacketSize), false, pcap.BlockForever)
 
@@ -34,10 +47,13 @@ func main() {
 		Port: int(config.UdpPortReceiver),
 		IP:   config.IpAddressReceiver,
 	}
-	slogger.Infof("Listening on [%v]", addr)
+	listenStr := fmt.Sprintf("Listening on [%v]", addr)
+	slogger.Infof(listenStr)
+	fmt.Print(listenStr)
+
 	conn, err := net.ListenUDP("udp", &addr) // code does not block here
 	if err != nil {
-		panic(err)
+		slogger.Fatalf("Unable to listern on address [%v]: %s", addr, err)
 	}
 	defer conn.Close()
 
@@ -46,7 +62,7 @@ func main() {
 		rlen, remote, err := conn.ReadFromUDP(buf)
 
 		if err != nil {
-			panic(err)
+			slogger.Fatalf("Unable to read from connection]: %s", err)
 		}
 		slogger.Infof("Data read from [%v], length %d", remote, rlen)
 		handlePacket2(handle, buf[:rlen], remote, config)

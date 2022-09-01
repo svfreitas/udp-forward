@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net"
 
 	"github.com/google/gopacket"
@@ -36,10 +35,10 @@ func createSerializedUDPFrame(opts UdpFrameOptions) ([][]byte, error) {
 	// CRC 4
 
 	//udpPayloadSize := len(opts.payloadBytes)
-	log.Printf("payloadSize=%v", len(opts.payloadBytes))
+	slogger.Debugf("payloadSize=%v", len(opts.payloadBytes))
 
 	if len(opts.payloadBytes) > MaxUdpPayload { // MTU = 1500 = 1472 + 8 + 20
-		log.Print("UDP payload bigger than 1472 bytes, will be fragmented in several packets")
+		slogger.Debug("UDP payload bigger than 1472 bytes, will be fragmented in several packets")
 		return udpPacketFragmentationControl(opts)
 	} else {
 		return udpOnePacket(opts)
@@ -167,7 +166,7 @@ func udpPacketFragmentationControl(opts UdpFrameOptions) ([][]byte, error) {
 		slogger.Debugf("startSlicePos = %d, stopSlicePos = %d", startSlicePos, stopSlicePos)
 		slogger.Debugf("len(payloadBytes) = %d", len(opts.payloadBytes))
 		payloadFragmented := opts.payloadBytes[startSlicePos:stopSlicePos]
-		log.Printf("len(payloadFragmented) = %d", len(payloadFragmented))
+		slogger.Debugf("len(payloadFragmented) = %d", len(payloadFragmented))
 		slogger.Debugf("payloadFragmented = [%v]", payloadFragmented)
 
 		if i == 0 {
