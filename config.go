@@ -10,13 +10,12 @@ import (
 )
 
 type rawConfig struct {
-	InterfaceName      string `json:"interface_name"`
-	LogLevelConfigPort int    `json:"log_level_config_port"`
-	IpAddressReceiver  string `json:"ip_address_receiver"`
-	//	MacAddressReceiver string   `json:"mac_address_receiver"`
-	DefaultGateway string   `json:"default_gateway"`
-	MaxPacketSize  int      `json:"max_packet_size"`
-	Destinations   []string `json:"destinations"`
+	InterfaceName      string   `json:"interface_name"`
+	LogLevelConfigPort int      `json:"log_level_config_port"`
+	IpAddressReceiver  string   `json:"ip_address_receiver"`
+	DefaultGateway     string   `json:"default_gateway"`
+	MaxPacketSize      int      `json:"max_packet_size"`
+	Destinations       []string `json:"destinations"`
 }
 
 type Config struct {
@@ -118,16 +117,45 @@ func LoadConfiguration(filename string) (*Config, error) {
 		}
 		dest.Port = uint16(uPort)
 
-		var hwAddr net.HardwareAddr
-		if hwAddr, _, err = arping.Ping(dest.IpAddress); err != nil {
-			slogger.Warnf("MAC address resolution problem for Destination: %s, setting Default Gateway MAC Address", dest.IpAddress.String())
-			hwAddr = config.MacAddresDefaultGateway
-		}
-		dest.MacAddress = hwAddr
+		dest.MacAddress = findMacAddress(dest.IpAddress, host, netInterface, config.MacAddresDefaultGateway)
 
 		config.Destinations = append(config.Destinations, dest)
 	}
 
 	return &config, nil
 
+}
+
+func findMacAddress(ipAddress net.IP, host string, netInterface *net.Interface, defaulGatewayMacAddress net.HardwareAddr) net.HardwareAddr {
+	var hwAddr net.HardwareAddr
+	var err error
+	var found bool
+
+	if hwAddr, _, err = arping.Ping(ipAddress); err != nil {
+		sliceAddresses, err := netInterface.Addrs()
+		if err != nil {
+			slogger.Warnf("Failed to obtain addresses assigned to = %v with error = %v", netInterface, err)
+		} else {
+			slogger.Debugf("sliceAddresses = %v", sliceAddresses)
+			for _, v := range sliceAddresses {
+				hostFromList, _, err := net.SplitHostPort(v.String())
+				if err != nil {
+					slogger.Warnf("Failed to parse the addresses assigned to = %v with error = %v", netInterface, err)
+				} else {
+					slogger.Debugf("hostFromList = %v", hostFromList)
+					if hostFromList == host {
+						hwAddr = netInterface.HardwareAddr
+						found = true
+						slogger.Debug("Host match as a local IP, setting hardware address as the interface HW adress")
+						break
+					}
+				}
+			}
+		}
+		if !found {
+			slogger.Warnf("MAC address resolution problem for Destination: %s, setting Default Gateway MAC Address", ipAddress.String())
+			hwAddr = defaulGatewayMacAddress
+		}
+	}
+	return hwAddr
 }

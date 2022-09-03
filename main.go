@@ -31,12 +31,18 @@ func main() {
 		slogger.Fatalf("Unable to load configuration, error :%s", err)
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("/log/level", httpLogHandler)
-	host := fmt.Sprintf("localhost:%d", config.LogLevelConfigPort)
-	go http.ListenAndServe(host, mux)
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/log/level", httpLogHandler)
+		host := fmt.Sprintf("localhost:%d", config.LogLevelConfigPort)
+		err := http.ListenAndServe(host, mux)
+		if err != nil {
+			slogger.Warnf("Unable to create log configuration http server on  %d", host)
+		}
+	}()
 
-	handle, err := pcap.OpenLive(config.InterfaceName, int32(config.MaxPacketSize), false, pcap.BlockForever)
+	//handle, err := pcap.OpenLive(config.InterfaceName, int32(config.MaxPacketSize), false, pcap.BlockForever)
+	handle, err := pcap.OpenLive(config.InterfaceName, 65527, false, pcap.BlockForever)
 
 	if err != nil {
 		log.Fatal(err)
