@@ -11,12 +11,6 @@ import (
 )
 
 func main() {
-	httpLogHandler := InitLogger()
-
-	if slogger == nil {
-		panic("Unable to create logger")
-	}
-	defer slogger.Sync()
 
 	filename := flag.String("f", "", "configuration file")
 	flag.Parse()
@@ -28,8 +22,14 @@ func main() {
 	config, err := LoadConfiguration(*filename)
 
 	if err != nil {
-		slogger.Fatalf("Unable to load configuration, error :%s", err)
+		log.Fatalf("Unable to load configuration, error :%s", err)
 	}
+
+	httpLogHandler := InitLogger(config.LogFileLocation, config.LogFileSize, config.LogFileMaxBackups)
+	if slogger == nil {
+		log.Fatalf("Unable to create logger")
+	}
+	defer slogger.Sync()
 
 	go func() {
 		mux := http.NewServeMux()
@@ -104,7 +104,7 @@ func handlePacket2(handle *pcap.Handle, payload []byte, remote *net.UDPAddr, con
 			continue
 		}
 		slogger.Debugf("len(sliceFrameBytes) = %d", len(sliceFrameBytes))
-		slogger.Info("Sending data to %s", destination.IpAddress.String())
+		slogger.Debugf("Sending data to %s", destination.IpAddress.String())
 
 		for i, frame := range sliceFrameBytes {
 			slogger.Debugf("Sending frame[%d] = %v", i, frame)

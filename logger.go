@@ -10,8 +10,8 @@ import (
 
 var slogger *zap.SugaredLogger
 
-func InitLogger() http.Handler {
-	writeSyncer := getLogWriter()
+func InitLogger(logFileLocation string, logFileSize int, logFileMaxBackups int) http.Handler {
+	writeSyncer := getLogWriter(logFileLocation, logFileSize, logFileMaxBackups)
 	encoder := getEncoder()
 	atom := zap.NewAtomicLevel()
 	core := zapcore.NewCore(encoder, writeSyncer, atom)
@@ -31,13 +31,13 @@ func getEncoder() zapcore.Encoder {
 }
 
 // Save file log cut
-func getLogWriter() zapcore.WriteSyncer {
+func getLogWriter(logfileLocation string, logFileSize int, logFileMaxBackups int) zapcore.WriteSyncer {
 	lumberJackLogger := &lumberjack.Logger{
-		Filename:   "udp-forwarder.log", // Log name
-		MaxSize:    10,                  // File content size, MB
-		MaxBackups: 5,                   // Maximum number of old files retained
-		MaxAge:     30,                  // Maximum number of days to keep old files
-		Compress:   false,               // Is the file compressed
+		Filename:   logfileLocation + "udp-forwarder.log", // Log name
+		MaxSize:    logFileSize,                           // File content size, MB
+		MaxBackups: logFileMaxBackups,                     // Maximum number of old files retained
+		//MaxAge:     90,                                    // Maximum number of days to keep old files
+		Compress: false, // Is the file compressed
 	}
 	return zapcore.AddSync(lumberJackLogger)
 }
